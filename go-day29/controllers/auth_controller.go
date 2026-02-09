@@ -1,9 +1,9 @@
 package controllers
 
 import (
-	"database/sql"
-	"net/http"
 	"task-manager-api/config"
+
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -20,33 +20,42 @@ func Register(c *gin.Context) {
 		Password string `json:"password"`
 	}
 
-	// Read JSON Body
 	if err := c.BindJSON(&data); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid Input"})
+		c.JSON(400, gin.H{"error": "Invalid Input"})
 		return
 	}
 
 	// Hash Password
-	hash, _ := bcrypt.GenerateFromPassword([]byte(data.Password), 10)
+	hash, err := bcrypt.GenerateFromPassword([]byte(data.Password), 10)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Password Hash Failed"})
+		return
+	}
 
 	// Insert User
 	query := "INSERT INTO users(name,email,password) VALUES(?,?,?)"
 
-	_, err := config.DB.Exec(query, data.Name, data.Email, hash)
+	result, err := config.DB.Exec(query, data.Name, data.Email, string(hash))
 
 	if err != nil {
 
-		// Duplicate Email Check
-		if err == sql.ErrNoRows {
-			c.JSON(400, gin.H{"error": "User Exists"})
-			return
-		}
+		fmt.Println("❌ DB ERROR:", err) // Terminal-এ দেখাবে
 
-		c.JSON(500, gin.H{"error": err.Error()})
+		c.JSON(500, gin.H{
+			"error": err.Error(),
+		})
 		return
 	}
 
-	c.JSON(200, gin.H{"message": "Registration Successful"})
+	id, _ := result.LastInsertId()
+
+	fmt.Println("✅ User Inserted ID:", id)
+
+	c.JSON(200, gin.H{
+		"message": "Registration Successful",
+		"id":      id,
+	})
 }
 
 // --------------------
